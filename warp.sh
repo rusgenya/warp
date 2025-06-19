@@ -1,13 +1,11 @@
 #!/bin/bash
 # Advanced AmneziaWG-WARP Config Generator with Anti-DPI techniques
 # v2.2 - Fixed and Enhanced Version
-
 cleanup() {
     shred -u -z privatekey publickey psk noise_priv 2>/dev/null || true
     exit 0
 }
 trap cleanup EXIT INT TERM
-
 # 1. INITIALIZATION
 init() {
     echo "[+] Initializing Advanced WARP Config Generator..."
@@ -16,7 +14,6 @@ init() {
     set -o nounset
     set -o pipefail
 }
-
 # 2. DEPENDENCY CHECK
 check_deps() {
     local missing=()
@@ -34,7 +31,6 @@ check_deps() {
         exit 1
     fi
 }
-
 # 3. CLOUDFLARE WARP SERVER POOL
 get_warp_servers() {
     echo "[+] Fetching latest WARP endpoints..."
@@ -59,7 +55,6 @@ get_warp_servers() {
         warp_servers+=("${server%:*}:$((RANDOM%5000 + 2000))")
     done
 }
-
 # 4. KEY GENERATION
 generate_keys() {
     echo "[+] Generating quantum-resistant keys..."
@@ -71,7 +66,6 @@ generate_keys() {
     noise_priv=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n=')
     noise_pubkey=$(echo "$noise_priv" | wg pubkey 2>/dev/null || echo "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=")
 }
-
 # 5. TRAFFIC OBFUSCATION
 create_obfuscation() {
     echo "[+] Configuring advanced obfuscation..."
@@ -105,7 +99,6 @@ create_obfuscation() {
         "# MTU Variance: $((RANDOM%150 + 1200))-1500 bytes"
     )
 }
-
 # 6. CONFIG BUILDING
 build_config() {
     echo "[+] Building configuration with anti-DPI measures..."
@@ -137,7 +130,6 @@ build_config() {
         "${noise_config[@]}"
     )
 }
-
 # 7. OUTPUT HANDLING
 output_config() {
     local output_file="amnezia_warp_$(date +%s).conf"
@@ -149,7 +141,6 @@ output_config() {
     echo "    Preshared Key: $psk"
     echo "    Active Endpoint: ${current_server%%:*}"
 }
-
 # MAIN EXECUTION
 init
 check_deps
