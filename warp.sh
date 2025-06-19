@@ -1,7 +1,6 @@
 #!/bin/bash
 # Advanced AmneziaWG-WARP Config Generator with Anti-DPI techniques
 # v2.2 - Fixed and Enhanced Version
-
 cleanup() {
     shred -u -z privatekey publickey psk noise_priv 2>/dev/null || true
     exit 0
