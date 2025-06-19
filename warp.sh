@@ -1,25 +1,39 @@
 #!/bin/bash
 # Advanced AmneziaWG-WARP Config Generator with Anti-DPI techniques
-# v2.1 - Enhanced Obfuscation Package
+# v2.2 - Fixed and Enhanced Version
+
+cleanup() {
+    shred -u -z privatekey publickey psk noise_priv 2>/dev/null || true
+    exit 0
+}
+trap cleanup EXIT INT TERM
+
 # 1. INITIALIZATION
-set -e
-echo "[+] Initializing Advanced WARP Config Generator..."
+init() {
+    echo "[+] Initializing Advanced WARP Config Generator..."
+    export LC_ALL=C
+    set -o errexit
+    set -o nounset
+    set -o pipefail
+}
+
 # 2. DEPENDENCY CHECK
 check_deps() {
     local missing=()
-    for cmd in wg curl openssl; do
-        if ! command -v $cmd &> /dev/null; then
+    local deps=(wg curl openssl jq iptables tc ip)
+    
+    for cmd in "${deps[@]}"; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
             missing+=("$cmd")
         fi
     done
     
     if [ ${#missing[@]} -gt 0 ]; then
         echo "[!] Missing dependencies: ${missing[*]}"
-        echo "    Install with: sudo apt-get install wireguard-tools curl openssl"
+        echo "    Install with: sudo apt-get install wireguard-tools curl openssl jq iptables iproute2"
         exit 1
     fi
 }
-check_deps
 
 # 3. CLOUDFLARE WARP SERVER POOL
 get_warp_servers() {
@@ -32,8 +46,13 @@ get_warp_servers() {
         "162.159.192.4:2408"
         "162.159.193.1:2408"
         "162.159.193.2:2408"
-        $(curl -s https://api.cloudflareclient.com/v1/configuration | jq -r '.endpoints[] | "\(.host):\(.port)"' 2>/dev/null | head -5)
     )
+    
+    # Try to fetch additional endpoints from API
+    if api_servers=$(curl -s --connect-timeout 5 https://api.cloudflareclient.com/v1/configuration | jq -r '.endpoints[] | "\(.host):\(.port)"' 2>/dev/null | head -5); then
+        mapfile -t api_servers <<< "$api_servers"
+        warp_servers+=("${api_servers[@]}")
+    fi
     
     # Add backup ports
     for server in "${warp_servers[@]}"; do
@@ -41,65 +60,59 @@ get_warp_servers() {
     done
 }
 
-# 4. KEY GENERATION WITH ENHANCED ENTROPY
+# 4. KEY GENERATION
 generate_keys() {
     echo "[+] Generating quantum-resistant keys..."
     private_key=$(wg genkey)
     public_key=$(echo "$private_key" | wg pubkey)
-    psk=$(openssl rand -base64 32 | tr -d '\n=' | cut -c1-44)
+    psk=$(openssl rand -base64 32 | tr -d '\n=' | head -c 44)
     
     # Generate noise keys
-    noise_privkey=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n=')
-    noise_pubkey=$(echo "$noise_privkey" | wg pubkey 2>/dev/null || echo "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=")
+    noise_priv=$(dd if=/dev/urandom bs=32 count=1 2>/dev/null | base64 | tr -d '\n=')
+    noise_pubkey=$(echo "$noise_priv" | wg pubkey 2>/dev/null || echo "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=")
 }
 
-# 5. TRAFFIC OBFUSCATION ENGINE
+# 5. TRAFFIC OBFUSCATION
 create_obfuscation() {
     echo "[+] Configuring advanced obfuscation..."
     
-    # Domain fronting parameters
-    fake_hosts=(
+    local fake_hosts=(
         "Host: www.google.com"
         "X-Forwarded-Host: api.telegram.org"
         "CF-Connecting-IP: 1.2.3.4"
         "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
     )
     
-    # Packet manipulation rules
-    packet_rules=(
+    local packet_rules=(
         "PostUp = iptables -t mangle -A OUTPUT -m statistic --mode random --probability 0.1 -j DROP"
         "PreDown = iptables -t mangle -F"
         "PostUp = tc qdisc add dev %i root netem delay ${RANDOM%50}ms ${RANDOM%20}ms"
         "PreDown = tc qdisc del dev %i root"
     )
     
-    # Generate noise config
     noise_config=(
         "# Decoy Configuration Block"
         "[Peer]"
         "PublicKey = $noise_pubkey"
         "Endpoint = ${warp_servers[$RANDOM % ${#warp_servers[@]}]}"
         "AllowedIPs = 10.$((RANDOM%256)).0.0/16"
-        "PresharedKey = $(openssl rand -base64 32 | tr -d '\n=')"
+        "PresharedKey = $(openssl rand -base64 32 | tr -d '\n=' | head -c 44)"
         "PersistentKeepalive = $((RANDOM%30 + 5))"
         ""
         "# Traffic Obfuscation Parameters"
         "# ${fake_hosts[$RANDOM % ${#fake_hosts[@]}]}"
         "# Packet Manipulation: ${packet_rules[$RANDOM % ${#packet_rules[@]}]}"
         "# MTU Variance: $((RANDOM%150 + 1200))-1500 bytes"
-        "# Protocol Mimic: HTTP/3 (QUIC)"
     )
 }
 
-# 6. DYNAMIC CONFIG GENERATION
+# 6. CONFIG BUILDING
 build_config() {
     echo "[+] Building configuration with anti-DPI measures..."
     
-    # Select random server and port
     current_server="${warp_servers[$RANDOM % ${#warp_servers[@]}]}"
     port="${current_server#*:}"
     
-    # Main configuration
     config=(
         "# AmneziaWG-WARP Anti-DPI Configuration"
         "# Generated: $(date +"%Y-%m-%d %H:%M:%S %Z")"
@@ -122,38 +135,24 @@ build_config() {
         "PersistentKeepalive = $((RANDOM%25 + 5))"
         ""
         "${noise_config[@]}"
-        ""
-        "# Anti-DPI Techniques Applied:"
-        "# 1. Dynamic Port Hopping (current: $port)"
-        "# 2. Packet Size Randomization"
-        "# 3. Traffic Timing Obfuscation"
-        "# 4. Protocol Mimicry"
-        "# 5. Decoy Traffic Injection"
-        "# 6. Domain Fronting"
     )
 }
 
-# 7. OUTPUT AND SECURITY
+# 7. OUTPUT HANDLING
 output_config() {
     local output_file="amnezia_warp_$(date +%s).conf"
     printf "%s\n" "${config[@]}" > "$output_file"
-    
-    # Security cleanup
     chmod 600 "$output_file"
-    shred -u -z privatekey publickey psk 2>/dev/null || true
     
-    echo "[+] Configuration generated: $output_file"
+    echo "[+] Configuration saved to: $output_file"
     echo "    Public Key: $public_key"
     echo "    Preshared Key: $psk"
     echo "    Active Endpoint: ${current_server%%:*}"
-    echo ""
-    echo "[!] IMPORTANT: For complete protection, combine with:"
-    echo "    - Obfs4 proxy (for packet masking)"
-    echo "    - Dynamic IP rotation"
-    echo "    - Periodic config regeneration"
 }
 
-# EXECUTION PIPELINE
+# MAIN EXECUTION
+init
+check_deps
 get_warp_servers
 generate_keys
 create_obfuscation
