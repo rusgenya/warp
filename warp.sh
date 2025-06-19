@@ -1,11 +1,9 @@
 #!/bin/bash
 # Advanced AmneziaWG-WARP Config Generator with Anti-DPI techniques
 # v2.1 - Enhanced Obfuscation Package
-
 # 1. INITIALIZATION
 set -e
 echo "[+] Initializing Advanced WARP Config Generator..."
-
 # 2. DEPENDENCY CHECK
 check_deps() {
     local missing=()
